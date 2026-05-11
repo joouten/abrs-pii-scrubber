@@ -1,0 +1,8 @@
+# claude-mode generated files — do not commit
+/CHAT_TO_CODE.md
+/CODE_TO_CHAT.md
+
+# Python
+__pycache__/
+*.pyc
+.env
