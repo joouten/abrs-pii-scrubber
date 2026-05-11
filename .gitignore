@@ -6,3 +6,7 @@
 __pycache__/
 *.pyc
 .env
+
+# Real ticket data — never commit
+sample_ticket.txt
+sanitized_ticket.txt
