@@ -24,6 +24,7 @@ sources that decoded into garbled output.
 """
 
 import os
+import subprocess
 import sys
 import shutil
 import time
@@ -81,6 +82,21 @@ def _archive_target(source_name: str) -> Path:
     suffix = target.suffix
     stamp = time.strftime("%Y%m%dT%H%M%S")
     return ARCHIVE_DIR / f"{stem}.{stamp}{suffix}"
+
+
+def _open_in_file_manager(path: Path) -> None:
+    """Open `path` in the platform's default file manager. Best-effort -
+    a failure here (no GUI, xdg-open missing, headless CI) is logged but
+    must not crash the batch run; the audit log is already on disk."""
+    try:
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"(could not open {path} in file manager: {exc})")
 
 
 def _iter_input_files():
@@ -195,7 +211,7 @@ def run() -> int:
     audit_text = _format_audit_log(entries)
     with open(audit_path, "w", encoding="utf-8") as f:
         f.write(audit_text)
-    os.startfile(OUTPUT_DIR)
+    _open_in_file_manager(OUTPUT_DIR)
 
     print(f"Processed {len(entries)} file(s).")
     print(f"Audit log: {audit_path}")
