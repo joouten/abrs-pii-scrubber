@@ -10,3 +10,8 @@ __pycache__/
 # Real ticket data — never commit
 sample_ticket.txt
 sanitized_ticket.txt
+
+# Batch processing workspace — contents never committed
+input/
+output/
+archive/
