@@ -195,6 +195,7 @@ def run() -> int:
     audit_text = _format_audit_log(entries)
     with open(audit_path, "w", encoding="utf-8") as f:
         f.write(audit_text)
+    os.startfile(OUTPUT_DIR)
 
     print(f"Processed {len(entries)} file(s).")
     print(f"Audit log: {audit_path}")
