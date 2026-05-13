@@ -15,3 +15,6 @@ sanitized_ticket.txt
 input/
 output/
 archive/
+
+# Local PowerShell helper scripts
+*.ps1
