@@ -1,16 +1,20 @@
 """pii_scrubber - Remove PII from Azure support ticket text.
 
-v0.2.0 — Label-required matching only. Bare UUIDs without a recognised
-PII-bearing field label pass through unscrubbed.
+v0.3.0 — Unified label-required matching for both Subscription ID and Tenant ID.
 
 Scrubs three PII types from input text before passing to external APIs:
-- Subscription ID: matched only when the UUID is preceded by a
-  /subscriptions/ URL path segment OR keyed by "subscriptionId" in JSON.
-- Tenant ID: matched only when the UUID value is keyed by one of
-  tenantId, tenant_id, tid, directoryId, aadTenant, or aadTenantId in JSON.
+- Subscription ID: matched when a recognised subscription label
+  (subscriptionId, subscription_id, or a /subscriptions/ URL path segment,
+  including escaped \/ forms) is followed by a UUID across any common
+  Azure-log delimiter — JSON colon-quote, URL slash, escaped slash, equals,
+  or whitespace.
+- Tenant ID: matched when a recognised tenant label (tenantId, tenant_id,
+  tid, directoryId, aadTenant, aadTenantId) is followed by a UUID across
+  the same delimiter set — JSON key-value, key=value, and label-colon
+  formats all included.
 - Email Address.
 
-Bare/unlabeled UUIDs are NOT scrubbed. This is a deliberate v0.2 design
+Bare/unlabeled UUIDs are NOT scrubbed. This is a deliberate v0.3 design
 choice after v0.1 testing showed an 86% false-positive rate on real Azure
 Site Recovery logs where workflow/activity/correlation IDs are also UUID-
 formatted. Residual risk accepted: an unlabeled subscription or tenant
@@ -30,28 +34,25 @@ Usage:
 import json
 import re
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
-# 1. Subscription ID in ARM-style URL paths: /subscriptions/<UUID>.
-SUBSCRIPTION_URL_PATTERN = re.compile(
-    rf"(/subscriptions/)({UUID_RE})",
+# Shared separator — matches any common label-to-value delimiter in Azure logs.
+# Covers: JSON colon-quote, URL slash, escaped slash, equals, whitespace.
+_SEP = r"""[\s:="'\/\\]{1,5}"""
+
+# Subscription ID — matches subscriptionId, subscription_id, or /subscriptions/ URL path.
+SUBSCRIPTION_PATTERN = re.compile(
+    rf"\b(subscription_?id|subscriptions)({_SEP})({UUID_RE})",
     re.IGNORECASE,
 )
 
-# 2. Subscription ID as a quoted JSON key. Handles both double- and
-# single-quoted JSON.
-SUBSCRIPTION_JSON_PATTERN = re.compile(
-    rf"""(["']subscriptionId["']\s*:\s*["'])({UUID_RE})(["'])""",
-    re.IGNORECASE,
-)
-
-# 3. Tenant ID as a quoted JSON key. Quoted-key context is required so
-# the short alias `tid` cannot false-match substrings like "resTid".
-_TENANT_KEYS = r"(?:aadTenantId|aadTenant|tenantId|tenant_id|directoryId|tid)"
-TENANT_JSON_PATTERN = re.compile(
-    rf"""(["']{_TENANT_KEYS}["']\s*:\s*["'])({UUID_RE})(["'])""",
+# Tenant ID — matches all known label aliases.
+# \btid\b uses word boundaries to prevent matching 'tid' inside words like 'resTid'.
+_TENANT_LABELS = r"(?:aadtenantid|aadtenant|tenantid|tenant_id|directoryid|\btid\b)"
+TENANT_PATTERN = re.compile(
+    rf"({_TENANT_LABELS})({_SEP})({UUID_RE})",
     re.IGNORECASE,
 )
 
@@ -64,25 +65,20 @@ EMAIL_PATTERN = re.compile(
 def scrub(text: str) -> dict:
     counts = {"SUBSCRIPTION_ID": 0, "TENANT_ID": 0, "EMAIL_ADDRESS": 0}
 
-    def _sub_url_repl(match):
+    def _sub_repl(match):
         counts["SUBSCRIPTION_ID"] += 1
-        return f"{match.group(1)}[SUBSCRIPTION_ID]"
-
-    def _sub_json_repl(match):
-        counts["SUBSCRIPTION_ID"] += 1
-        return f"{match.group(1)}[SUBSCRIPTION_ID]{match.group(3)}"
+        return f"{match.group(1)}{match.group(2)}[SUBSCRIPTION_ID]"
 
     def _tenant_repl(match):
         counts["TENANT_ID"] += 1
-        return f"{match.group(1)}[TENANT_ID]{match.group(3)}"
+        return f"{match.group(1)}{match.group(2)}[TENANT_ID]"
 
     def _email_repl(_match):
         counts["EMAIL_ADDRESS"] += 1
         return "[EMAIL_ADDRESS]"
 
-    text = SUBSCRIPTION_URL_PATTERN.sub(_sub_url_repl, text)
-    text = SUBSCRIPTION_JSON_PATTERN.sub(_sub_json_repl, text)
-    text = TENANT_JSON_PATTERN.sub(_tenant_repl, text)
+    text = SUBSCRIPTION_PATTERN.sub(_sub_repl, text)
+    text = TENANT_PATTERN.sub(_tenant_repl, text)
     text = EMAIL_PATTERN.sub(_email_repl, text)
 
     return {
@@ -138,6 +134,15 @@ if __name__ == "__main__":
         '"resTid":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}'
     )
 
+    escaped_url_ticket = (
+        r"\"VaultResourceArmId\": \"\/subscriptions\/1e5a0f82-cb0a-4085-88de-cdbeb42ec782"
+        r"\/resourceGroups\/rg-prod\""
+    )
+
+    key_equals_ticket = "TenantId=650276a4-323f-4f8e-9069-a2e10e21197e"
+
+    label_colon_ticket = "SubscriptionId: 1e5a0f82-cb0a-4085-88de-cdbeb42ec782"
+
     cases = [
         ("plain prose (no labels)", plain_prose_ticket, (0, 0, 1)),
         ("url path",                url_path_ticket,    (2, 0, 0)),
@@ -145,6 +150,9 @@ if __name__ == "__main__":
         ("expanded tenant",         expanded_tenant_ticket, (0, 5, 0)),
         ("single-quoted json",      single_quoted_ticket,   (1, 0, 0)),
         ("non-PII fields",          non_pii_ticket,         (0, 0, 0)),
+        ("escaped url slash",       escaped_url_ticket,     (1, 0, 0)),
+        ("key=value tenant",        key_equals_ticket,      (0, 1, 0)),
+        ("label colon space",       label_colon_ticket,     (1, 0, 0)),
     ]
 
     for label, sample, expected in cases:
@@ -162,10 +170,13 @@ if __name__ == "__main__":
         )
         print()
 
-    # URL prefix preservation - Pattern 1 must leave /subscriptions/ intact.
+    # v0.3 SUBSCRIPTION_PATTERN matches the URL-path form and replaces the UUID with [SUBSCRIPTION_ID].
+    assert SUBSCRIPTION_PATTERN.search(url_path_ticket), (
+        "SUBSCRIPTION_PATTERN must match a /subscriptions/<UUID> URL path"
+    )
     url_result = scrub(url_path_ticket)
-    assert "/subscriptions/[SUBSCRIPTION_ID]" in url_result["sanitized_text"], (
-        "URL prefix /subscriptions/ must be preserved in sanitized output"
+    assert "[SUBSCRIPTION_ID]" in url_result["sanitized_text"], (
+        "sanitized output must contain [SUBSCRIPTION_ID]"
     )
     assert "12345678" not in url_result["sanitized_text"], "URL UUID leaked"
 
@@ -181,10 +192,10 @@ if __name__ == "__main__":
         "resTid UUID must pass through - it is not a recognised tenant label"
     )
 
-    # v0.2 contract - bare UUID in plain prose passes through.
+    # v0.3 contract - bare UUID in plain prose passes through.
     prose_result = scrub(plain_prose_ticket)
     assert "11111111-2222-3333-4444-555555555555" in prose_result["sanitized_text"], (
         "v0.2 contract: unlabeled bare UUIDs in prose must pass through unscrubbed"
     )
 
-    print("All v0.2 tests passed.")
+    print("All v0.3 tests passed.")
