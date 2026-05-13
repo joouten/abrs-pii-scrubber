@@ -4,7 +4,7 @@ Reusable Python tool that removes PII from Azure support ticket text
 before it crosses an API boundary. Standard library only — no external
 dependencies.
 
-Current version: **v0.3.0** (batch pipeline on top of the v0.2 scrubber).
+Current version: **v0.3.0** — unified label-required patterns for Subscription ID and Tenant ID, with batch pipeline.
 
 ## Installation
 
@@ -156,10 +156,7 @@ never enter version control.
 python pii_scrubber.py
 ```
 
-Prints scrubbed samples and asserts expected replacement counts across
-six cases: plain prose (no labels), URL path, JSON, expanded tenant
-vocabulary, single-quoted JSON, and a non-PII control case
-(`workflowId`, `activityId`, `requestId`, `resTid`).
+Prints scrubbed samples and asserts expected replacement counts across nine cases: plain prose (no labels), URL path, JSON, expanded tenant vocabulary, single-quoted JSON, non-PII control case (`workflowId`, `activityId`, `requestId`, `resTid`), escaped URL slash (`\/subscriptions\/`), key=value tenant (`TenantId=uuid`), and label-colon (`SubscriptionId: uuid`).
 
 ## License
 
