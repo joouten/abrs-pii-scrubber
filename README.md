@@ -23,6 +23,17 @@ Current version: **v0.3.0** (batch pipeline on top of the v0.2 scrubber).
 
 No `pip install` required. The `input/`, `output/`, and `archive/` folders are created automatically on first run.
 
+## Quick Start
+
+1. Drop your source file(s) into the `input/` folder
+2. Run the batch scrubber:
+   ```
+   python batch_scrubber.py
+   ```
+3. Collect sanitized files from `output/` — filenames are unchanged
+4. Review `output/audit_log.txt` to confirm what was replaced
+5. Original files with PII are in `archive/` — see the warning below before handling them
+
 ## What it scrubs
 
 The scrubber operates on a **label-required** model — UUIDs are only
