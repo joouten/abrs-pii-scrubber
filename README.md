@@ -36,24 +36,17 @@ No `pip install` required. The `input/`, `output/`, and `archive/` folders are c
 
 ## What it scrubs
 
-The scrubber operates on a **label-required** model — UUIDs are only
-replaced when they appear in a recognised, structured context. Bare
-UUIDs in free prose are left alone, because real Azure logs are full
-of workflow / activity / correlation / job IDs that share the UUID
-format but carry no PII.
+The scrubber operates on a **label-required** model — UUIDs are only replaced when preceded by a recognised label. Bare UUIDs in free prose are left alone, because real Azure logs are full of workflow, activity, correlation, and job IDs that share the UUID format but carry no PII.
 
-| PII type | Detection rule | Replacement |
-| --- | --- | --- |
-| Subscription ID | UUID in a `/subscriptions/<UUID>` URL path | `[SUBSCRIPTION_ID]` (prefix preserved) |
-| Subscription ID | `"subscriptionId"` JSON key (single- or double-quoted, case-insensitive) | `[SUBSCRIPTION_ID]` |
-| Tenant ID | JSON key in `{tenantId, tenant_id, tid, directoryId, aadTenant, aadTenantId}` | `[TENANT_ID]` |
-| Email Address | Standard email pattern, including `+tags`, subdomains, and long TLDs | `[EMAIL_ADDRESS]` |
+| PII type | Labels | Detection formats | Replacement |
+| --- | --- | --- | --- |
+| Subscription ID | `subscriptionId`, `subscription_id`, `subscriptions` | JSON key-value, URL path (`/subscriptions/` and `\/subscriptions\/`), key=value, label-colon | `[SUBSCRIPTION_ID]` |
+| Tenant ID | `tenantId`, `tenant_id`, `tid`†, `directoryId`, `aadTenant`, `aadTenantId` | JSON key-value, key=value, label-colon | `[TENANT_ID]` |
+| Email Address | — | Standard email pattern including `+tags`, subdomains, and long TLDs | `[EMAIL_ADDRESS]` |
 
-There is **no bare-UUID fallback**. An unlabeled subscription or tenant
-UUID in free prose will pass through unscrubbed — accepted residual
-risk in exchange for eliminating the v0.1 false-positive flood
-(86% false positives measured against a real 765 KB Azure Site Recovery
-log; v0.2 brought that to 0%).
+† `tid` uses word boundaries — will not match inside words like `resTid`.
+
+There is **no bare-UUID fallback**. An unlabeled UUID in free prose passes through unscrubbed — accepted residual risk in exchange for eliminating false positives (86% false-positive rate measured against a real Azure Site Recovery log with v0.1; v0.3 brings that to 0%).
 
 ## Library usage (single string)
 
