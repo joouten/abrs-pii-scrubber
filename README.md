@@ -6,6 +6,23 @@ dependencies.
 
 Current version: **v0.3.0** (batch pipeline on top of the v0.2 scrubber).
 
+## Installation
+
+**Requirements:** Python 3.6 or later. Tested on Python 3.14.3. No external dependencies — standard library only.
+
+1. Clone the repo:
+   ```
+   git clone https://github.com/joouten/abrs-pii-scrubber.git
+   cd abrs-pii-scrubber
+   ```
+
+2. Verify your Python version:
+   ```
+   python --version
+   ```
+
+No `pip install` required. The `input/`, `output/`, and `archive/` folders are created automatically on first run.
+
 ## What it scrubs
 
 The scrubber operates on a **label-required** model — UUIDs are only
@@ -84,6 +101,14 @@ What it does:
 Error handling is per-file: a single unreadable / unwritable file is
 logged as `FAILED-READ`, `FAILED-WRITE`, or `WARNING-ARCHIVE` in the
 audit log; the batch continues with the remaining files.
+
+> ⚠️ **Archive folder contains original PII**
+>
+> After each batch run, `archive/` holds the original, unscrubbed source files — the same files you dropped into `input/`. PII is still present in those files.
+>
+> Treat `archive/` with the same access controls and handling requirements as your source tickets. When originals are no longer needed, delete them manually — the batch script never deletes files automatically.
+>
+> `archive/` is gitignored and will never enter version control.
 
 ### Audit log format
 
